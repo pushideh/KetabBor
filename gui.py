@@ -73,13 +73,12 @@ class PDFSplitterGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("کتاب‌بُر")
-        self.root.geometry("480x600")
+        self.root.geometry("420x580")
         self.root.resizable(False, False)
 
         self.input_path = tk.StringVar()
         self.output_path = tk.StringVar()
         self.direction = tk.StringVar(value="rtl")
-        self.dpi = tk.StringVar(value="300")
         self.split_ratio = tk.StringVar(value="0.5")
         self.keep_first = tk.BooleanVar(value=False)
 
@@ -140,9 +139,7 @@ class PDFSplitterGUI:
 
         num_row = ttk.Frame(opts_frame)
         num_row.pack(fill="x", padx=8, pady=3)
-        ttk.Label(num_row, text=rtl("DPI رندر:")).pack(side="right", padx=4)
-        ttk.Entry(num_row, textvariable=self.dpi, width=8, justify="right").pack(side="right", padx=4)
-        ttk.Label(num_row, text=rtl("نسبت برش (0.5=وسط):")).pack(side="right", padx=(20, 4))
+        ttk.Label(num_row, text=rtl("نسبت برش (0.5=وسط):")).pack(side="right", padx=4)
         ttk.Entry(num_row, textvariable=self.split_ratio, width=8, justify="right").pack(side="right", padx=4)
 
         check_row = ttk.Frame(opts_frame)
@@ -179,7 +176,7 @@ class PDFSplitterGUI:
 
         # ترتیب Pack: اول متن «طراحی شده توسط:» (سمت راست/اول خوانده می‌شود)
         # سپس «پوشیده» (سمت چپ آن/بعد از دونقطه خوانده می‌شود)
-        ttk.Label(inner, text=":طراحی شده توسط ",
+        ttk.Label(inner, text=" :طراحی شده توسط ",
                   font=("Segoe UI", 9)).pack(side="right")
 
         link_label = tk.Label(inner, text="پوشیده", fg="#0066cc",
@@ -245,17 +242,16 @@ class PDFSplitterGUI:
             messagebox.showerror("خطا", "مسیر خروجی را مشخص کنید.")
             return
         try:
-            dpi = int(self.dpi.get())
             ratio = float(self.split_ratio.get())
         except ValueError:
-            messagebox.showerror("خطا", "مقدار DPI یا نسبت برش نامعتبر است.")
+            messagebox.showerror("خطا", "مقدار نسبت برش نامعتبر است.")
             return
 
         self.run_btn.configure(state="disabled")
         self.progress.configure(value=0)
         self.status_var.set(rtl("در حال آماده‌سازی..."))
         thread = threading.Thread(target=self._run_processing,
-                                   args=(in_path, out_path, dpi, ratio), daemon=True)
+                                   args=(in_path, out_path, ratio), daemon=True)
         thread.start()
 
     def _update_progress(self, current, total, message, file_prefix=""):
@@ -263,8 +259,8 @@ class PDFSplitterGUI:
         self.root.after(0, lambda: self.progress.configure(value=pct))
         self.root.after(0, lambda: self.status_var.set(rtl(f"{file_prefix}{message}")))
 
-    def _run_processing(self, in_path, out_path, dpi, ratio):
-        rtl = self.direction.get() == "rtl"
+    def _run_processing(self, in_path, out_path, ratio):
+        is_rtl = self.direction.get() == "rtl"
         try:
             if os.path.isdir(in_path):
                 os.makedirs(out_path, exist_ok=True)
@@ -276,7 +272,7 @@ class PDFSplitterGUI:
                     prefix = f"[فایل {fidx}/{len(pdf_files)}: {fname}] "
                     process_pdf(
                         os.path.join(in_path, fname), os.path.join(out_path, fname),
-                        rtl=rtl, split_ratio=ratio, dpi=dpi,
+                        rtl=is_rtl, split_ratio=ratio,
                         keep_first=self.keep_first.get(),
                         progress_callback=lambda cur, tot, msg, p=prefix:
                             self._update_progress(cur, tot, msg, p)
@@ -285,7 +281,7 @@ class PDFSplitterGUI:
             else:
                 self.root.after(0, self._log, f"در حال پردازش: {os.path.basename(in_path)}")
                 process_pdf(
-                    in_path, out_path, rtl=rtl, split_ratio=ratio, dpi=dpi,
+                    in_path, out_path, rtl=is_rtl, split_ratio=ratio,
                     keep_first=self.keep_first.get(),
                     progress_callback=self._update_progress
                 )
