@@ -1,7 +1,7 @@
 # کتاب‌بُر
 این برنامه با کمک هوشمص کلاد نوشته شده و کار آن تبدیل pdfهای دوصفحه‌ای به تک‌صفحه‌ای است.
 
-![banner](https://raw.githubusercontent.com/pushideh/KetabBor/main/KetabBor_Banner.png)
+![banner](https://raw.githubusercontent.com/pushideh/KetabBor/main/KetabBor_Banner.jpg)
 
 .
 # نسخه‌ی ویندوز
