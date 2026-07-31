@@ -8,114 +8,64 @@ ketabBor.py
 مستقل قرار می‌دهد. ترتیب خروجی (راست اول یا چپ اول) بر اساس جهت کتاب
 (راست‌به‌چپ/چپ‌به‌راست) تعیین می‌شود.
 
-اولویت با استخراج مستقیم تصویر جاسازی‌شده در PDF است (بدون افت کیفیت).
-اگر صفحه تصویر ساده نبود (وکتور/متن آزاد یا چند تصویر) با رزولوشن بالا
-رندر و سپس کراپ می‌شود.
+روش کار (نسخه‌ی جدید — حذف واقعی، نه فقط کراپ بصری):
+برای هر نیمه، کل صفحه‌ی اصلی کپی می‌شود و سپس با ابزار Redaction واقعی
+PyMuPDF (`apply_redactions`) محتوای نیمه‌ی دیگر (متن + وکتور + پیکسل‌های
+تصویر در آن ناحیه) به‌طور واقعی از جریان محتوای PDF حذف می‌شود — نه فقط
+با clip پنهان می‌شود. سپس MediaBox/CropBox صفحه به اندازه‌ی همان نیمه
+کوچک می‌شود. نتیجه:
+  - حجم فایل واقعاً کاهش می‌یابد (محتوای نیمه‌ی حذف‌شده دیگر در فایل نیست).
+  - اگر PDF ورودی متن قابل‌انتخاب/هایلایت دارد، همان بخش از متن که در
+    نیمه‌ی نگه‌داشته‌شده است باقی می‌ماند و قابل‌انتخاب است.
+  - هیچ رستر/تصویرسازی مجددی برای متن و وکتور رخ نمی‌دهد.
 
-پیش‌نیازها:
-    pip install pymupdf pillow
+محدودیت شناخته‌شده: نسخه‌های قدیمی‌تر PyMuPDF ممکن است حذف واقعی
+اشکال وکتوری (خطوط/مسیرهای غیرمتنی) را به‌خوبی حذف متن انجام ندهند؛
+کد این حالت را با پارامتر «graphics» در صورت پشتیبانی فعال می‌کند و در
+غیر این صورت به‌صورت خاموش (بدون خطا) به همان حذف متن/تصویر بسنده می‌کند.
+
+پیش‌نیاز:
+    pip install pymupdf
 
 استفاده:
     python ketabBor.py INPUT.pdf -o OUTPUT.pdf --rtl
     python ketabBor.py INPUT.pdf -o OUTPUT.pdf --ltr
-    python ketabBor.py INPUT_DIR/ -o OUTPUT_DIR/ --rtl --dpi 400
+    python ketabBor.py INPUT_DIR/ -o OUTPUT_DIR/ --rtl
 
-    --rtl : کتاب راست‌به‌چپ (فارسی/عربی) -> در هر صفحه‌ی اصلی، نیمه‌ی
-            راست را قبل از نیمه‌ی چپ در خروجی قرار می‌دهد.
-    --ltr : کتاب چپ‌به‌راست (پیش‌فرض) -> نیمه‌ی چپ قبل از نیمه‌ی راست.
+    --rtl : کتاب راست‌به‌چپ (فارسی/عربی) -> نیمه‌ی راست قبل از چپ.
+    --ltr : کتاب چپ‌به‌راست (پیش‌فرض) -> نیمه‌ی چپ قبل از راست.
     --split-ratio 0.5   نسبت برش (پیش‌فرض دقیقاً وسط = 0.5)
-    --dpi 300           رزولوشن رندر برای صفحاتی که تصویر تک‌قطعه ندارند
-    --keep-first        اگر صفحه‌ی اول جلد است و نباید دو نیم شود
+    --keep-first        صفحه‌ی اول (مثلاً جلد) بدون تغییر کپی شود
 """
 
 import argparse
-import io
 import os
 import sys
 
 try:
     import fitz  # PyMuPDF
 except ImportError:
-    print("خطا: PyMuPDF نصب نیست. دستور زیر را اجرا کنید:\n    pip install pymupdf pillow")
-    sys.exit(1)
-
-try:
-    from PIL import Image
-except ImportError:
-    print("خطا: Pillow نصب نیست. دستور زیر را اجرا کنید:\n    pip install pymupdf pillow")
+    print("خطا: PyMuPDF نصب نیست. دستور زیر را اجرا کنید:\n    pip install pymupdf")
     sys.exit(1)
 
 
-def get_full_page_image(page):
-    """
-    اگر صفحه دقیقاً یک تصویر باشد که کل صفحه را می‌پوشاند، آن تصویر خام را
-    (بدون رمزگشایی/رمزگذاری مجدد -> بدون افت کیفیت) برمی‌گرداند.
-    در غیر این صورت None برمی‌گرداند تا به روش رندر برویم.
-    """
-    images = page.get_images(full=True)
-    if len(images) != 1:
-        return None
-
-    xref = images[0][0]
-    # مستطیل قرارگیری تصویر روی صفحه را پیدا می‌کنیم
-    rects = page.get_image_rects(xref)
-    if not rects:
-        return None
-    rect = rects[0]
-    page_rect = page.rect
-
-    # باید تصویر تقریباً کل صفحه را بپوشاند (حداقل ۹۰٪ مساحت)
-    coverage = (rect.get_area()) / max(page_rect.get_area(), 1)
-    if coverage < 0.9:
-        return None
-
-    base_image = page.parent.extract_image(xref)
-    img_bytes = base_image["image"]
-    pil_img = Image.open(io.BytesIO(img_bytes))
-    pil_img.load()
-    return pil_img
+def _apply_real_redaction(page, rect_to_delete):
+    """محتوای داخل rect_to_delete را به‌طور واقعی از صفحه حذف می‌کند
+    (متن، تصویر، و در صورت پشتیبانی PyMuPDF، وکتور/خطوط)."""
+    page.add_redact_annot(rect_to_delete)
+    kwargs = {}
+    if hasattr(fitz, "PDF_REDACT_IMAGE_PIXELS"):
+        kwargs["images"] = fitz.PDF_REDACT_IMAGE_PIXELS
+    if hasattr(fitz, "PDF_REDACT_LINE_ART_REMOVE_IF_COVERED"):
+        kwargs["graphics"] = fitz.PDF_REDACT_LINE_ART_REMOVE_IF_COVERED
+    try:
+        page.apply_redactions(**kwargs)
+    except TypeError:
+        # نسخه‌ی قدیمی‌تر PyMuPDF که این پارامترها را نمی‌شناسد
+        page.apply_redactions()
 
 
-def render_page_image(page, dpi):
-    """رندر پرکیفیت کل صفحه به تصویر، برای صفحاتی که تصویر تک‌قطعه ندارند."""
-    zoom = dpi / 72.0
-    matrix = fitz.Matrix(zoom, zoom)
-    pix = page.get_pixmap(matrix=matrix, alpha=False)
-    mode = "RGB" if pix.n < 4 else "RGBA"
-    img = Image.frombytes(mode, (pix.width, pix.height), pix.samples)
-    return img
-
-
-def split_image(img, ratio):
-    """تصویر را عمودی به دو نیمه (چپ، راست) بر اساس نسبت برش تقسیم می‌کند."""
-    w, h = img.size
-    cut = int(round(w * ratio))
-    left_half = img.crop((0, 0, cut, h))
-    right_half = img.crop((cut, 0, w, h))
-    return left_half, right_half
-
-
-def pil_to_pdf_page(pdf_doc, pil_img, dpi_hint=300):
-    """یک تصویر PIL را به‌عنوان یک صفحه‌ی جدید (اندازه‌ی متناسب) به PDF اضافه می‌کند."""
-    w_px, h_px = pil_img.size
-    # نسبت px -> pt بر اساس ۷۲ نقطه در اینچ
-    w_pt = w_px * 72.0 / dpi_hint
-    h_pt = h_px * 72.0 / dpi_hint
-
-    buf = io.BytesIO()
-    save_kwargs = {}
-    if pil_img.mode not in ("RGB", "L"):
-        pil_img = pil_img.convert("RGB")
-    # PNG برای حفظ کامل کیفیت (بدون افت فشرده‌سازی جدید مخرب)
-    pil_img.save(buf, format="PNG")
-    img_bytes = buf.getvalue()
-
-    new_page = pdf_doc.new_page(width=w_pt, height=h_pt)
-    new_page.insert_image(new_page.rect, stream=img_bytes)
-    return new_page
-
-
-def process_pdf(input_path, output_path, rtl=True, split_ratio=0.5, dpi=300,
+def process_pdf(input_path, output_path, rtl=True, split_ratio=0.5,
                  keep_first=False, progress_callback=None):
     """
     progress_callback (اختیاری): تابعی با امضای
@@ -137,34 +87,34 @@ def process_pdf(input_path, output_path, rtl=True, split_ratio=0.5, dpi=300,
             # صفحه‌ی اول (مثلاً جلد) بدون تغییر کپی می‌شود
             out.insert_pdf(src, from_page=i, to_page=i)
             print(f"[{i + 1}/{total}] صفحه‌ی جلد بدون تغییر کپی شد.")
+            if progress_callback:
+                progress_callback(i + 1, total, f"صفحه‌ی جلد ({i + 1}) بدون تغییر کپی شد")
             continue
 
-        img = get_full_page_image(page)
-        source_dpi = 300
-        if img is None:
-            img = render_page_image(page, dpi)
-            source_dpi = dpi
-            method = f"رندر با {dpi} DPI"
-        else:
-            method = "استخراج مستقیم تصویر (بدون افت کیفیت)"
-            # DPI واقعی تصویر را از روی نسبت پیکسل به اندازه‌ی صفحه محاسبه می‌کنیم
-            page_w_pt = page.rect.width
-            if page_w_pt > 0:
-                source_dpi = img.size[0] / (page_w_pt / 72.0)
+        rect = page.rect
+        cut_x = rect.x0 + rect.width * split_ratio
 
-        left_half, right_half = split_image(img, split_ratio)
+        left_rect = fitz.Rect(rect.x0, rect.y0, cut_x, rect.y1)
+        right_rect = fitz.Rect(cut_x, rect.y0, rect.x1, rect.y1)
 
-        if rtl:
-            first_half, second_half = right_half, left_half
-        else:
-            first_half, second_half = left_half, right_half
+        targets = [right_rect, left_rect] if rtl else [left_rect, right_rect]
 
-        pil_to_pdf_page(out, first_half, dpi_hint=source_dpi)
-        pil_to_pdf_page(out, second_half, dpi_hint=source_dpi)
+        for kept_rect in targets:
+            other_rect = left_rect if kept_rect is right_rect else right_rect
 
-        print(f"[{i + 1}/{total}] {method} — دو صفحه ساخته شد.")
+            # کل صفحه را کپی می‌کنیم، سپس نیمه‌ی ناخواسته را واقعاً حذف می‌کنیم
+            out.insert_pdf(src, from_page=i, to_page=i)
+            new_page = out[-1]
+
+            _apply_real_redaction(new_page, other_rect)
+
+            # اندازه‌ی صفحه را به همان نیمه‌ی نگه‌داشته‌شده کوچک می‌کنیم
+            new_page.set_cropbox(kept_rect)
+            new_page.set_mediabox(kept_rect)
+
+        print(f"[{i + 1}/{total}] دو صفحه ساخته شد؛ نیمه‌ی حذف‌شده واقعاً از فایل پاک شد.")
         if progress_callback:
-            progress_callback(i + 1, total, f"صفحه‌ی {i + 1} از {total} انجام شد ({method})")
+            progress_callback(i + 1, total, f"صفحه‌ی {i + 1} از {total} انجام شد")
 
     out.save(output_path, garbage=4, deflate=True)
     out.close()
@@ -174,7 +124,7 @@ def process_pdf(input_path, output_path, rtl=True, split_ratio=0.5, dpi=300,
 
 def main():
     parser = argparse.ArgumentParser(
-        description="نصف کردن صفحات دو-صفحه‌ای یک PDF اسکن‌شده و قرار دادن هرکدام در صفحه‌ی جدا."
+        description="نصف کردن صفحات دو-صفحه‌ای یک PDF و قرار دادن هرکدام در صفحه‌ی جدا (بدون رستر، با حفظ متن قابل‌انتخاب)."
     )
     parser.add_argument("input", help="فایل PDF ورودی یا پوشه‌ی حاوی چند فایل PDF")
     parser.add_argument("-o", "--output", required=True,
@@ -186,8 +136,6 @@ def main():
                             help="کتاب چپ‌به‌راست (نیمه‌ی چپ اول) - پیش‌فرض")
     parser.add_argument("--split-ratio", type=float, default=0.5,
                          help="نسبت محل برش از چپ صفحه (پیش‌فرض 0.5 = دقیقاً وسط)")
-    parser.add_argument("--dpi", type=int, default=300,
-                         help="رزولوشن رندر برای صفحاتی که تصویر تک‌قطعه ندارند (پیش‌فرض 300)")
     parser.add_argument("--keep-first", action="store_true",
                          help="صفحه‌ی اول (جلد) بدون تغییر کپی شود")
 
@@ -205,10 +153,10 @@ def main():
             out_path = os.path.join(args.output, fname)
             print(f"\n=== در حال پردازش: {fname} ===")
             process_pdf(in_path, out_path, rtl=rtl, split_ratio=args.split_ratio,
-                        dpi=args.dpi, keep_first=args.keep_first)
+                        keep_first=args.keep_first)
     else:
         process_pdf(args.input, args.output, rtl=rtl, split_ratio=args.split_ratio,
-                    dpi=args.dpi, keep_first=args.keep_first)
+                    keep_first=args.keep_first)
 
 
 if __name__ == "__main__":
