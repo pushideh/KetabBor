@@ -19,10 +19,10 @@
 ### ۱) پیش‌نیازها (روی ویندوز)
 
 1. نصب Python 3.10 یا بالاتر از [python.org](https://www.python.org/downloads/) — هنگام نصب حتماً تیک **Add python.exe to PATH** زده شود.
-2. در پوشه‌ی پروژه (کنار فایل `ketabBor.py`)، در PowerShell یا CMD:
+2.  در PowerShell یا CMD این دستور را وارد کنید تا پیش‌نیازهای برنامه نصب شود:
 
 ```
-pip install -r requirements.txt
+pip install -r https://raw.githubusercontent.com/pushideh/KetabBor/refs/heads/main/requirements.txt
 ```
 
 این دو کتابخانه نصب می‌شود:
@@ -32,7 +32,7 @@ pip install -r requirements.txt
 ### ۲) اجرا
 
 ```
-python ketabBor.py "کتاب.pdf" -o "کتاب_خروجی.pdf" --rtl
+python https://raw.githubusercontent.com/pushideh/KetabBor/refs/heads/main/ketabBor.py "book.pdf" -o "book_split.pdf" --rtl
 ```
 
 - برای کتاب فارسی/عربی از `--rtl` استفاده کنید (نیمه‌ی راست هر صفحه اول می‌آید).
@@ -41,15 +41,15 @@ python ketabBor.py "کتاب.pdf" -o "کتاب_خروجی.pdf" --rtl
 - اگر خط تا کتاب دقیقاً وسط نیست: `--split-ratio 0.48` (مثلاً کمی به چپ)
 - برای پردازش کل یک پوشه به‌جای یک فایل:
 ```
-python ketabBor.py "پوشه_ورودی" -o "پوشه_خروجی" --rtl
+python https://raw.githubusercontent.com/pushideh/KetabBor/refs/heads/main/ketabBor.py "InputFolder" -o "OutputFolder" --rtl
 ```
 
 ### ۳) رابط گرافیکی (Drag & Drop)
 
-به‌جای خط فرمان می‌توانید از رابط گرافیکی `gui.py` استفاده کنید (فایل `ketabBor.py` باید کنارش باشد):
+به‌جای خط فرمان می‌توانید از رابط گرافیکی `gui.py` استفاده کنید. برای این منظور می‌تواندی در cmd بنویسید:
 
 ```
-python gui.py
+python https://raw.githubusercontent.com/pushideh/KetabBor/refs/heads/main/gui.py
 ```
 
 - اگر `pip install tkinterdnd2` را هم زده باشید، می‌توانید فایل/پوشه‌ی PDF را مستقیم روی کادر بکشید و رها کنید.
